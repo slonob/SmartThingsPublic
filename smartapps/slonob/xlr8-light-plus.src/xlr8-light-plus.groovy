@@ -38,7 +38,7 @@ preferences {
         input "motio", "capability.motionSensor", title: "Which motion sensor?", required: false
     }
     section("Turn lights off when there's been no movement after:"){
-        input "delayStopMinutes", "number", title: "Minutes:"
+        input "delayStopSec", "number", title: "Seconds:"
     }
     
     
@@ -61,6 +61,7 @@ def initialize() {
     if (motio) {
 	    subscribe(motio, "motion", accelHandler)
 	}
+    state.switchWasOn = [1,2]
 }
 
 def accelHandler(evt) {
@@ -84,67 +85,71 @@ def accelHandler(evt) {
     }
     else {
         state.motionStopTime = now()
-        if(delayStopMinutes) {
-            runIn(delayStopMinutes*60, turnOffMotionAfterDelay, [overwrite: false])
+        if(delayStopsec) {
+            runIn(delayStopSec, turnOffMotionAfterDelay, [overwrite: false])
         } else {
-            turnOffMotionAfterDelay()
+            runIn(59, turnOffMotionAfterDelay, [overwrite: false])
         }
     }
 }
 
 def turnOnLights1() {
     // either switch is "on" or "off"
-    state.ogStatusLights1 = lights1.currentSwitch.contains("on");
-    log.debug "lights1.currentSwitch = $lights1.currentSwitch -- state.ogStatusLights1 = $state.ogStatusLights1"
-	if (lights1 && state.ogStatusLights1) { 
-    	log.debug "lights1 were already on."
-		if (lights1Blink) {
-	    	log.debug "Blinking lights1."
-		    lights1.off()
-            lights1.on()
-        }
-	} else {
-    	log.debug "lights1 were off. Turning on."
-	    lights1.on()
-	}
+    for (light in lights1) {
+    	state.switchWasOn[light.getId()] = light.currentSwitch.contains("on");
+    	log.debug "light.currentSwitch = $light.currentSwitch -- state.switchWasOn[light.getId()]= " + state.switchWasOn[light.getId()]
+		if (lights1 && state.switchWasOn[light.getId()]) { 
+    		log.debug "light was already on."
+			if (lights1Blink) {
+	    		log.debug "Blinking lights1."
+		    	light.off()
+            	light.on()
+        	}
+		} else {
+    		log.debug "lights1 were off. Turning on."
+	    	light.on()
+		}
+    }
 	state.lastStatus = "on"
 }
 
 def turnOnLights2() {
-    state.ogStatusLights2 = lights2.currentSwitch.contains("on");
-    log.debug "lights2.currentSwitch = $lights2.currentSwitch -- state.ogStatusLights2 = $state.ogStatusLights2"
-	if (lights2 && state.ogStatusLights2) { 
-    	log.debug "lights2 were already on."
-		if (lights2Blink) {
-	    	log.debug "Blinking lights2."
-		    lights2.off()
-	 	    lights2.on()
-        }
-	} else {
-    	log.debug "lights2 were off. Turning on."
-	    lights2.on()
-	}
+    // either switch is "on" or "off"
+    for (light in lights2) {
+    	state.switchWasOn[light.getId()] = light.currentSwitch.contains("on");
+    	log.debug "light.currentSwitch = $light.currentSwitch -- state.switchWasOn[light.getId()]= " + state.switchWasOn[light.getId()]
+		if (lights1 && state.switchWasOn[light.getId()]) { 
+    		log.debug "light was already on."
+			if (lights2Blink) {
+	    		log.debug "Blinking lights2."
+		    	light.off()
+            	light.on()
+        	}
+		} else {
+    		log.debug "lights2 were off. Turning on."
+	    	light.on()
+		}
+    }
 }
 
 def turnOffMotionAfterDelay() {
     log.trace "In turnOffMotionAfterDelay, state.motionStopTime = $state.motionStopTime, state.lastStatus = $state.lastStatus"
     if (state.motionStopTime && state.lastStatus != "off") {
-        def elapsed = now() - state.motionStopTime
-        log.trace "elapsed = $elapsed"
-        if (elapsed >= ((delayStopMinutes ?: 0) * 60000L) - 2000) {
-        	log.debug "Turning off lights1? state.ogStatusLights1 = $state.ogStatusLights1"
-			if (state.ogStatusLights1 == false) {
-	            log.debug "Turning off lights1."
-				lights1.off()
-            }
-			if (lights2) {
-				log.debug "Turning off lights2? state.ogStatusLights2 = $state.ogStatusLights2"
-				if (state.ogStatusLights2 == false) {
-                	log.debug "Turning off lights2."
-	            	lights2.off()
-                }
+ 		for (light in light1) {
+			if (state.switchWasOn[light.getId()] == false) {
+	    		log.debug "Turning off light."
+				light.off()
 			}
-			state.lastStatus = "off"
         }
-    }
+		if (lights2) {
+			for (light in light2) {
+				if (state.switchWasOn[light.getId()] == false) {
+                	log.debug "Turning off light."
+	            	light.off()
+				}
+            }
+		}
+		state.lastStatus = "off"
+        state.motionStopTime = null
+	}
 }
